@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 
 export default function VideoPlayer({ url, type }) {
@@ -14,9 +14,9 @@ export default function VideoPlayer({ url, type }) {
   const [isLoading, setIsLoading] = useState(true);
 
   // Extract Google Drive file ID from various URL formats
-  const extractDriveId = useCallback((driveUrl) => {
+  const extractDriveId = (driveUrl) => {
     const patterns = [
-      /\/d\/([a-zA-Z0-9_-]+)/,           // drive.google.com/file/d/FILE_ID/view
+      /\/d\/([a-zA-Z0-9_-]+)/,           // drive.google.com/file/d/FILE_ID/
       /[?&]id=([a-zA-Z0-9_-]+)/,         // drive.google.com/uc?id=FILE_ID or open?id=FILE_ID
       /\/file\/d\/([a-zA-Z0-9_-]+)/,     // Alternative format
     ];
@@ -25,7 +25,7 @@ export default function VideoPlayer({ url, type }) {
       if (match?.[1]) return match[1];
     }
     return null;
-  }, []);
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -38,7 +38,7 @@ export default function VideoPlayer({ url, type }) {
     setError(null);
     setIsLoading(true);
 
-    // Cleanup previous HLS instance
+    // Cleanup previous instance
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -57,6 +57,7 @@ export default function VideoPlayer({ url, type }) {
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         video.play().catch((err) => console.log("Auto-play prevented:", err));
+        setIsLoading(false);
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
@@ -72,6 +73,7 @@ export default function VideoPlayer({ url, type }) {
             default:
               hls.destroy();
               setError("HLS stream failed to load");
+              setIsLoading(false);
               break;
           }
         }
@@ -86,6 +88,7 @@ export default function VideoPlayer({ url, type }) {
         video.play().catch((err) => console.log("Auto-play prevented:", err));
       } else {
         setError("Invalid Google Drive URL format");
+        setIsLoading(false);
       }
     } else {
       // Standard MP4/WebM
@@ -105,7 +108,7 @@ export default function VideoPlayer({ url, type }) {
     const onEnded = () => setIsPlaying(false);
     const onError = (e) => {
       console.error("Video error:", e);
-      setError("Failed to load video. Check URL or format.");
+      setError("Failed to load video. Check URL or CORS settings.");
       setIsLoading(false);
     };
     const onWaiting = () => setIsLoading(true);
@@ -121,12 +124,76 @@ export default function VideoPlayer({ url, type }) {
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("canplay", onCanPlay);
 
-    // Keyboard controls
+    return () => {
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("loadedmetadata", onLoadedMetadata);
+      video.removeEventListener("volumechange", onVolumeChange);
+      video.removeEventListener("ended", onEnded);
+      video.removeEventListener("error", onError);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("canplay", onCanPlay);
+
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [url, type]);
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (video.paused) {
+      video.play();
+    } else {
+      video.pause();
+    }
+  };
+
+  const handleSeek = (e) => {
+    const video = videoRef.current;
+    const time = parseFloat(e.target.value);
+    video.currentTime = time;
+  };
+
+  const handleVolume = (e) => {
+    const video = videoRef.current;
+    const vol = parseFloat(e.target.value);
+    video.volume = vol;
+    setVolume(vol);
+  };
+
+  const handlePlaybackRate = (e) => {
+    const video = videoRef.current;
+    const rate = parseFloat(e.target.value);
+    video.playbackRate = rate;
+    setPlaybackRate(rate);
+  };
+
+  const toggleFullscreen = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!document.fullscreenElement) {
+      video.requestFullscreen().then(() => setIsFullscreen(true)).catch(console.error);
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(console.error);
+    }
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
     const handleKeyDown = (e) => {
+      const video = videoRef.current;
       if (!video) return;
-      switch (e.key) {
-        case " ":
-        case "k":
+
+      // Only handle keys when video container is focused or video is playing
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+
+      switch (e.code) {
+        case "Space":
+        case "KeyK":
           e.preventDefault();
           togglePlay();
           break;
@@ -141,16 +208,18 @@ export default function VideoPlayer({ url, type }) {
         case "ArrowUp":
           e.preventDefault();
           video.volume = Math.min(1, video.volume + 0.1);
+          setVolume(video.volume);
           break;
         case "ArrowDown":
           e.preventDefault();
           video.volume = Math.max(0, video.volume - 0.1);
+          setVolume(video.volume);
           break;
-        case "f":
+        case "KeyF":
           e.preventDefault();
           toggleFullscreen();
           break;
-        case "m":
+        case "KeyM":
           e.preventDefault();
           video.muted = !video.muted;
           break;
@@ -159,80 +228,9 @@ export default function VideoPlayer({ url, type }) {
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
-
-    // Fullscreen change listener
-    const onFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-
-    return () => {
-      video.removeEventListener("play", onPlay);
-      video.removeEventListener("pause", onPause);
-      video.removeEventListener("timeupdate", onTimeUpdate);
-      video.removeEventListener("loadedmetadata", onLoadedMetadata);
-      video.removeEventListener("volumechange", onVolumeChange);
-      video.removeEventListener("ended", onEnded);
-      video.removeEventListener("error", onError);
-      video.removeEventListener("waiting", onWaiting);
-      video.removeEventListener("canplay", onCanPlay);
-      document.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("fullscreenchange", onFullscreenChange);
-
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-    };
-  }, [url, type, extractDriveId]);
-
-  const togglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) {
-      video.play();
-    } else {
-      video.pause();
-    }
-  };
-
-  const handleSeek = (e) => {
-    const video = videoRef.current;
-    const time = parseFloat(e.target.value);
-    if (video && !isNaN(time)) {
-      video.currentTime = time;
-    }
-  };
-
-  const handleVolume = (e) => {
-    const video = videoRef.current;
-    const vol = parseFloat(e.target.value);
-    if (video) {
-      video.volume = vol;
-      setVolume(vol);
-    }
-  };
-
-  const handlePlaybackRate = (e) => {
-    const video = videoRef.current;
-    const rate = parseFloat(e.target.value);
-    if (video) {
-      video.playbackRate = rate;
-      setPlaybackRate(rate);
-    }
-  };
-
-  const toggleFullscreen = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (!document.fullscreenElement) {
-      video.requestFullscreen().catch(console.error);
-    } else {
-      document.exitFullscreen().catch(console.error);
-    }
-  };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const formatTime = (seconds) => {
     if (isNaN(seconds) || !isFinite(seconds)) return "0:00";
@@ -260,9 +258,20 @@ export default function VideoPlayer({ url, type }) {
         <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>⚠️</div>
         <h2 style={{ marginBottom: "1rem" }}>Playback Error</h2>
         <p style={{ opacity: 0.8, marginBottom: "2rem" }}>{error}</p>
-        <p style={{ fontSize: "0.9rem", opacity: 0.6 }}>
-          Check the URL format and try again.
-        </p>
+        <button
+          onClick={() => setError(null)}
+          style={{
+            padding: "1rem 2rem",
+            borderRadius: "12px",
+            border: "none",
+            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            color: "#fff",
+            fontWeight: "bold",
+            cursor: "pointer",
+          }}
+        >
+          Try Again
+        </button>
       </div>
     );
   }
@@ -302,7 +311,7 @@ export default function VideoPlayer({ url, type }) {
         />
 
         {/* Loading Overlay */}
-        {isLoading && duration === 0 && (
+        {isLoading && (
           <div
             style={{
               position: "absolute",
@@ -316,12 +325,25 @@ export default function VideoPlayer({ url, type }) {
               background: "rgba(0,0,0,0.7)",
             }}
           >
-            <div style={{ color: "#fff", fontSize: "1.2rem" }}>Loading...</div>
+            <div style={{ textAlign: "center", color: "#fff" }}>
+              <div
+                style={{
+                  width: "50px",
+                  height: "50px",
+                  border: "4px solid #333",
+                  borderTopColor: "#667eea",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                  margin: "0 auto 1rem",
+                }}
+              />
+              <p>Loading video...</p>
+            </div>
           </div>
         )}
 
         {/* Play/Pause Overlay */}
-        {!isPlaying && !isLoading && (
+        {!isPlaying && !isLoading && !error && (
           <div
             onClick={togglePlay}
             style={{
@@ -364,17 +386,17 @@ export default function VideoPlayer({ url, type }) {
           <input
             type="range"
             min="0"
-            max={duration || 100}
+            max={duration > 0 ? duration : 100}
             value={currentTime}
             onChange={handleSeek}
-            disabled={duration === 0 || isLoading}
+            disabled={duration <= 0 || isLoading}
             style={{
               width: "100%",
               height: "6px",
               borderRadius: "3px",
               appearance: "none",
               background: duration > 0
-                ? "linear-gradient(to right, #667eea 0%, #764ba2 100%)"
+                ? `linear-gradient(to right, #667eea ${(currentTime / duration) * 100}%, #333 ${(currentTime / duration) * 100}%)`
                 : "#333",
               outline: "none",
               opacity: duration > 0 ? 1 : 0.5,
@@ -400,18 +422,22 @@ export default function VideoPlayer({ url, type }) {
           {/* Play/Pause */}
           <button
             onClick={togglePlay}
+            disabled={isLoading}
             style={{
               padding: "0.8rem 1.5rem",
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              background: isLoading
+                ? "#555"
+                : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
               border: "none",
               borderRadius: "8px",
               color: "white",
               fontWeight: "bold",
-              cursor: "pointer",
+              cursor: isLoading ? "not-allowed" : "pointer",
               transition: "transform 0.2s",
+              opacity: isLoading ? 0.7 : 1,
             }}
           >
-            {isPlaying ? "⏸ Pause" : "▶ Play"}
+            {isLoading ? "⏳ Loading..." : isPlaying ? "⏸ Pause" : "▶ Play"}
           </button>
 
           {/* Volume */}
@@ -475,26 +501,59 @@ export default function VideoPlayer({ url, type }) {
             fontSize: "14px",
           }}
         >
-          <strong>Type:</strong> {type.toUpperCase()} |{" "}
-          <strong>Status:</strong> {isPlaying ? "Playing" : "Paused"}{" "}
-          {duration > 0 && (
-            <>| <strong>Duration:</strong> {formatTime(duration)}</>
-          )}
+          <strong>Type:</strong> {type.toUpperCase()} | <strong>Status:</strong>{" "}
+          {isLoading ? "Loading" : isPlaying ? "Playing" : "Paused"}
+          {duration > 0 && ` | Duration: ${formatTime(duration)}`}
         </div>
 
         {/* Keyboard Shortcuts Hint */}
-        <div
+        <details
           style={{
-            marginTop: "0.5rem",
-            paddingTop: "0.5rem",
-            borderTop: "1px solid #0f3460",
+            marginTop: "1rem",
             color: "#666",
             fontSize: "12px",
           }}
         >
-          ⌨ Space/K: Play/Pause | ←/→: Seek ±10s | ↑/↓: Volume | F: Fullscreen | M: Mute
-        </div>
+          <summary style={{ cursor: "pointer" }}>⌨️ Keyboard Shortcuts</summary>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.5rem", marginTop: "0.5rem" }}>
+            <div><kbd style={{ background: "#0f3460", padding: "2px 6px", borderRadius: "4px" }}>Space / K</kbd> Play/Pause</div>
+            <div><kbd style={{ background: "#0f3460", padding: "2px 6px", borderRadius: "4px" }}>← / →</kbd> Seek ±10s</div>
+            <div><kbd style={{ background: "#0f3460", padding: "2px 6px", borderRadius: "4px" }}>↑ / ↓</kbd> Volume ±10%</div>
+            <div><kbd style={{ background: "#0f3460", padding: "2px 6px", borderRadius: "4px" }}>F</kbd> Fullscreen</div>
+            <div><kbd style={{ background: "#0f3460", padding: "2px 6px", borderRadius: "4px" }}>M</kbd> Mute</div>
+          </div>
+        </details>
       </div>
+
+      <style jsx>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        input[type="range"]::-webkit-slider-thumb {
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: #667eea;
+          cursor: pointer;
+          transition: transform 0.2s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+          transform: scale(1.2);
+        }
+        input[type="range"]:disabled::-webkit-slider-thumb {
+          background: #666;
+          cursor: not-allowed;
+        }
+        input[type="range"]::-moz-range-thumb {
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: #667eea;
+          border: none;
+          cursor: pointer;
+        }
+      `}</style>
     </div>
   );
 }
