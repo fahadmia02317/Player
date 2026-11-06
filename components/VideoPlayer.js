@@ -29,9 +29,9 @@ export default function VideoPlayer({ url, type }) {
     return null;
   }, []);
 
-  // Build direct Google Drive streaming URL
+  // Build direct Google Drive streaming URL (export=view for inline playback)
   const buildDriveUrl = useCallback((driveId) => {
-    return `https://drive.google.com/uc?export=download&id=${driveId}`;
+    return `https://drive.google.com/uc?export=view&id=${driveId}`;
   }, []);
 
   useEffect(() => {
@@ -52,39 +52,46 @@ export default function VideoPlayer({ url, type }) {
     }
 
     // Handle different video types
-    if (type === "hls" && Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 90,
-      });
+    if (type === "hls") {
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 90,
+        });
 
-      hls.loadSource(url);
-      hls.attachMedia(video);
+        hls.loadSource(url);
+        hls.attachMedia(video);
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch((err) => console.log("Auto-play prevented:", err));
-      });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch((err) => console.log("Auto-play prevented:", err));
+        });
 
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) {
-          console.error("HLS Error:", data);
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              break;
-            default:
-              hls.destroy();
-              setError("HLS streaming failed. The stream may be offline or blocked.");
-              break;
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            console.error("HLS Error:", data);
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                hls.recoverMediaError();
+                break;
+              default:
+                hls.destroy();
+                setError("HLS streaming failed. The stream may be offline or blocked.");
+                setIsLoading(false);
+                break;
+            }
           }
-        }
-      });
+        });
 
-      hlsRef.current = hls;
+        hlsRef.current = hls;
+      } else {
+        // HLS not supported natively - show error
+        setError("HLS streaming is not supported in this browser. Please use Chrome, Firefox, Safari, or Edge.");
+        setIsLoading(false);
+      }
     } else if (type === "drive") {
       const driveId = extractDriveId(url);
       if (driveId) {
@@ -96,7 +103,7 @@ export default function VideoPlayer({ url, type }) {
         setIsLoading(false);
       }
     } else {
-      // Standard MP4/WebM
+      // Standard MP4/WebM/OGG
       video.src = url;
       video.play().catch((err) => console.log("Auto-play prevented:", err));
     }
@@ -114,7 +121,7 @@ export default function VideoPlayer({ url, type }) {
     const onError = (e) => {
       console.error("Video error:", e);
       if (type === "drive") {
-        setError("Failed to load Google Drive video. The file may be private, deleted, or too large for direct streaming.");
+        setError("Failed to load Google Drive video. The file may be private, deleted, or blocked by CORS. Try a direct MP4 link instead.");
       } else if (type === "hls") {
         setError("HLS stream failed to load. Check if the stream is online.");
       } else {
@@ -198,6 +205,7 @@ export default function VideoPlayer({ url, type }) {
     document.addEventListener("fullscreenchange", onFullscreenChange);
 
     return () => {
+      // Remove event listeners first
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("timeupdate", onTimeUpdate);
