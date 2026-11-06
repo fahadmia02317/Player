@@ -14,11 +14,11 @@ export default function Home() {
     setIsPlaying(true);
   };
 
-  // Improved auto-detection for various video URL formats
+  // Improved auto-detection logic
   const detectVideoType = (url) => {
     const lowerUrl = url.toLowerCase();
 
-    // Google Drive - check first since it can have various formats
+    // Google Drive (check first as it may contain other patterns)
     if (lowerUrl.includes("drive.google.com")) {
       return "drive";
     }
@@ -26,17 +26,17 @@ export default function Home() {
     // HLS streams
     if (
       lowerUrl.includes(".m3u8") ||
-      lowerUrl.includes("hls") ||
       lowerUrl.includes(".m3u") ||
-      lowerUrl.includes("manifest.m3u8") ||
-      lowerUrl.includes("/hls/") ||
-      lowerUrl.includes("master.m3u8")
+      lowerUrl.includes("hls") ||
+      lowerUrl.includes("manifest") ||
+      lowerUrl.includes(".ism/") ||
+      lowerUrl.includes("/master.m3u8")
     ) {
       return "hls";
     }
 
     // DASH streams
-    if (lowerUrl.includes(".mpd") || lowerUrl.includes("manifest.mpd")) {
+    if (lowerUrl.includes(".mpd") || lowerUrl.includes("dash")) {
       return "dash"; // Will fall back to mp4
     }
 
@@ -57,7 +57,7 @@ export default function Home() {
       return "mp4";
     }
 
-    // Default to mp4 for unknown formats
+    // Default to mp4 for unknown
     return "mp4";
   };
 
@@ -66,7 +66,7 @@ export default function Home() {
 
     const type = detectVideoType(customUrl);
 
-    setVideoUrl(customUrl);
+    setVideoUrl(customUrl.trim());
     setVideoType(type);
     setIsPlaying(true);
   };
@@ -125,6 +125,7 @@ export default function Home() {
                 type="text"
                 value={customUrl}
                 onChange={(e) => setCustomUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCustomPlay()}
                 placeholder="Paste video URL here (MP4, m3u8, or Google Drive)"
                 style={{
                   flex: 1,
@@ -158,7 +159,7 @@ export default function Home() {
               </button>
             </div>
             <p style={{ marginTop: "1rem", fontSize: "0.9rem", opacity: 0.7 }}>
-              💡 Supports: .m3u8 (HLS), MP4, WebM, Google Drive direct links, blob URLs
+              💡 Supports: .m3u8 (HLS), MP4, WebM, Google Drive direct links, .mpd (DASH), blob URLs
             </p>
           </div>
 
@@ -307,7 +308,7 @@ export default function Home() {
             }}>
               <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📺</div>
               <h3 style={{ marginBottom: "0.5rem" }}>Google Drive Support</h3>
-              <p style={{ opacity: 0.8 }}>Direct playback from Google Drive links (all formats)</p>
+              <p style={{ opacity: 0.8 }}>Direct playback from Google Drive links (all URL formats)</p>
             </div>
 
             <div style={{
@@ -378,6 +379,11 @@ export default function Home() {
         button:hover {
           transform: translateY(-2px);
           box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        input:focus {
+          outline: 2px solid #667eea;
+          outline-offset: 2px;
         }
       `}</style>
     </>
