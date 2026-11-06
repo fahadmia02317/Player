@@ -16,15 +16,42 @@ export default function Home() {
 
   const handleCustomPlay = () => {
     if (!customUrl.trim()) return;
-    
+
     // Auto-detect type based on URL
     let type = "mp4";
-    if (customUrl.includes(".m3u8") || customUrl.includes("hls")) {
+    const url = customUrl.toLowerCase();
+
+    // HLS detection
+    if (
+      url.includes(".m3u8") ||
+      url.includes("hls") ||
+      url.includes(".m3u") ||
+      url.includes("manifest.m3u8")
+    ) {
       type = "hls";
-    } else if (customUrl.includes("drive.google.com")) {
+    }
+    // Google Drive detection
+    else if (
+      url.includes("drive.google.com") ||
+      url.includes("docs.google.com")
+    ) {
       type = "drive";
     }
-    
+    // DASH detection (future support)
+    else if (url.includes(".mpd") || url.includes("dash")) {
+      type = "mp4"; // fallback to native for now
+    }
+    // Common video extensions
+    else if (
+      url.includes(".mp4") ||
+      url.includes(".webm") ||
+      url.includes(".ogg") ||
+      url.includes(".mov") ||
+      url.includes(".mkv")
+    ) {
+      type = "mp4";
+    }
+
     setVideoUrl(customUrl);
     setVideoType(type);
     setIsPlaying(true);
@@ -69,7 +96,7 @@ export default function Home() {
 
         {/* Main Content */}
         <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "2rem" }}>
-          
+
           {/* Custom URL Input */}
           <div style={{
             background: "rgba(255,255,255,0.1)",
@@ -104,8 +131,8 @@ export default function Home() {
                   padding: "1rem 2rem",
                   borderRadius: "12px",
                   border: "none",
-                  background: customUrl.trim() 
-                    ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" 
+                  background: customUrl.trim()
+                    ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
                     : "#ccc",
                   color: customUrl.trim() ? "#fff" : "#666",
                   fontWeight: "bold",
@@ -130,7 +157,7 @@ export default function Home() {
               backdropFilter: "blur(10px)",
             }}>
               <h3 style={{ marginBottom: "1.5rem" }}>📺 Try Demo Videos</h3>
-              
+
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
                 {/* HLS Stream */}
                 <button
@@ -229,7 +256,7 @@ export default function Home() {
               animation: "fadeIn 0.5s ease-in",
             }}>
               <VideoPlayer url={videoUrl} type={videoType} />
-              
+
               <div style={{ textAlign: "center", marginTop: "2rem" }}>
                 <button
                   onClick={() => setIsPlaying(false)}
@@ -324,7 +351,7 @@ export default function Home() {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        
+
         input[type="range"]::-webkit-slider-thumb {
           appearance: none;
           width: 16px;
@@ -333,7 +360,7 @@ export default function Home() {
           background: #667eea;
           cursor: pointer;
         }
-        
+
         button:hover {
           transform: translateY(-2px);
           box-shadow: 0 10px 30px rgba(0,0,0,0.3);
