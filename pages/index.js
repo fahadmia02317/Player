@@ -14,43 +14,57 @@ export default function Home() {
     setIsPlaying(true);
   };
 
+  // Improved auto-detection for various video URL formats
+  const detectVideoType = (url) => {
+    const lowerUrl = url.toLowerCase();
+
+    // Google Drive - check first since it can have various formats
+    if (lowerUrl.includes("drive.google.com")) {
+      return "drive";
+    }
+
+    // HLS streams
+    if (
+      lowerUrl.includes(".m3u8") ||
+      lowerUrl.includes("hls") ||
+      lowerUrl.includes(".m3u") ||
+      lowerUrl.includes("manifest.m3u8") ||
+      lowerUrl.includes("/hls/") ||
+      lowerUrl.includes("master.m3u8")
+    ) {
+      return "hls";
+    }
+
+    // DASH streams
+    if (lowerUrl.includes(".mpd") || lowerUrl.includes("manifest.mpd")) {
+      return "dash"; // Will fall back to mp4
+    }
+
+    // Common video extensions
+    if (
+      lowerUrl.includes(".mp4") ||
+      lowerUrl.includes(".webm") ||
+      lowerUrl.includes(".ogg") ||
+      lowerUrl.includes(".mov") ||
+      lowerUrl.includes(".mkv") ||
+      lowerUrl.includes(".avi")
+    ) {
+      return "mp4";
+    }
+
+    // Blob URLs
+    if (lowerUrl.startsWith("blob:")) {
+      return "mp4";
+    }
+
+    // Default to mp4 for unknown formats
+    return "mp4";
+  };
+
   const handleCustomPlay = () => {
     if (!customUrl.trim()) return;
 
-    // Auto-detect type based on URL
-    let type = "mp4";
-    const url = customUrl.toLowerCase();
-
-    // HLS detection
-    if (
-      url.includes(".m3u8") ||
-      url.includes("hls") ||
-      url.includes(".m3u") ||
-      url.includes("manifest.m3u8")
-    ) {
-      type = "hls";
-    }
-    // Google Drive detection
-    else if (
-      url.includes("drive.google.com") ||
-      url.includes("docs.google.com")
-    ) {
-      type = "drive";
-    }
-    // DASH detection (future support)
-    else if (url.includes(".mpd") || url.includes("dash")) {
-      type = "mp4"; // fallback to native for now
-    }
-    // Common video extensions
-    else if (
-      url.includes(".mp4") ||
-      url.includes(".webm") ||
-      url.includes(".ogg") ||
-      url.includes(".mov") ||
-      url.includes(".mkv")
-    ) {
-      type = "mp4";
-    }
+    const type = detectVideoType(customUrl);
 
     setVideoUrl(customUrl);
     setVideoType(type);
@@ -144,7 +158,7 @@ export default function Home() {
               </button>
             </div>
             <p style={{ marginTop: "1rem", fontSize: "0.9rem", opacity: 0.7 }}>
-              💡 Supports: .m3u8 (HLS), MP4, WebM, Google Drive direct links
+              💡 Supports: .m3u8 (HLS), MP4, WebM, Google Drive direct links, blob URLs
             </p>
           </div>
 
@@ -293,7 +307,7 @@ export default function Home() {
             }}>
               <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📺</div>
               <h3 style={{ marginBottom: "0.5rem" }}>Google Drive Support</h3>
-              <p style={{ opacity: 0.8 }}>Direct playback from Google Drive links</p>
+              <p style={{ opacity: 0.8 }}>Direct playback from Google Drive links (all formats)</p>
             </div>
 
             <div style={{
