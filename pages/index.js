@@ -35,11 +35,6 @@ export default function Home() {
       return "hls";
     }
 
-    // DASH streams
-    if (lowerUrl.includes(".mpd") || lowerUrl.includes("dash")) {
-      return "dash"; // Will fall back to mp4
-    }
-
     // Common video extensions
     if (
       lowerUrl.includes(".mp4") ||
@@ -77,7 +72,7 @@ export default function Home() {
         <title>🎬 Ultimate Video Player - Drive, CDN & m3u8 Support</title>
         <meta name="description" content="Multi-format Video Player supporting Google Drive, CDN, and HLS streams" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
+        {/* Removed favicon reference since file doesn't exist in repo */}
       </Head>
 
       <div style={{
@@ -159,7 +154,10 @@ export default function Home() {
               </button>
             </div>
             <p style={{ marginTop: "1rem", fontSize: "0.9rem", opacity: 0.7 }}>
-              💡 Supports: .m3u8 (HLS), MP4, WebM, Google Drive direct links, .mpd (DASH), blob URLs
+              💡 Supports: .m3u8 (HLS), MP4, WebM, Google Drive direct links, blob URLs
+            </p>
+            <p style={{ marginTop: "0.5rem", fontSize: "0.85rem", opacity: 0.6, color: "#ffa7a7" }}>
+              ⚠️ Note: Google Drive streaming may be blocked by CORS in some browsers. For best results, use direct MP4 or HLS (.m3u8) links.
             </p>
           </div>
 
