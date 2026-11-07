@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Hls from "hls.js";
 
 export default function VideoPlayer({ url, type }) {
@@ -12,15 +12,16 @@ export default function VideoPlayer({ url, type }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLive, setIsLive] = useState(false);
 
-  // Extract Google Drive file ID from various URL formats
+  // Memoized helper functions - stable references
   const extractDriveId = useCallback((driveUrl) => {
     const patterns = [
-      /\/d\/([a-zA-Z0-9_-]+)/,           // /d/FILE_ID
-      /[?&]id=([a-zA-Z0-9_-]+)/,         // ?id=FILE_ID or &id=FILE_ID
-      /\/file\/d\/([a-zA-Z0-9_-]+)/,     // /file/d/FILE_ID
-      /\/open\?id=([a-zA-Z0-9_-]+)/,     // /open?id=FILE_ID
-      /\/uc\?id=([a-zA-Z0-9_-]+)/,       // /uc?id=FILE_ID
+      /\/d\/([a-zA-Z0-9_-]+)/,
+      /[?&]id=([a-zA-Z0-9_-]+)/,
+      /\/file\/d\/([a-zA-Z0-9_-]+)/,
+      /\/open\?id=([a-zA-Z0-9_-]+)/,
+      /\/uc\?id=([a-zA-Z0-9_-]+)/,
     ];
     for (const pattern of patterns) {
       const match = driveUrl.match(pattern);
@@ -29,9 +30,22 @@ export default function VideoPlayer({ url, type }) {
     return null;
   }, []);
 
-  // Build direct Google Drive streaming URL (export=view for inline playback)
   const buildDriveUrl = useCallback((driveId) => {
     return `https://drive.google.com/uc?export=view&id=${driveId}`;
+  }, []);
+
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.src = "";
+      video.load();
+    }
   }, []);
 
   useEffect(() => {
@@ -44,12 +58,10 @@ export default function VideoPlayer({ url, type }) {
     setDuration(0);
     setError(null);
     setIsLoading(true);
+    setIsLive(false);
 
-    // Cleanup previous HLS instance
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
+    // Cleanup previous instance
+    cleanup();
 
     // Handle different video types
     if (type === "hls") {
@@ -64,7 +76,14 @@ export default function VideoPlayer({ url, type }) {
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          video.play().catch((err) => console.log("Auto-play prevented:", err));
+          // Check if live stream
+          const isLiveStream = hls.liveSyncPosition !== undefined;
+          setIsLive(isLiveStream);
+          
+          video.play().catch((err) => {
+            console.log("Auto-play prevented:", err);
+            setIsLoading(false);
+          });
         });
 
         hls.on(Hls.Events.ERROR, (event, data) => {
@@ -87,8 +106,11 @@ export default function VideoPlayer({ url, type }) {
         });
 
         hlsRef.current = hls;
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Native HLS support (Safari)
+        video.src = url;
+        video.play().catch((err) => console.log("Auto-play prevented:", err));
       } else {
-        // HLS not supported natively - show error
         setError("HLS streaming is not supported in this browser. Please use Chrome, Firefox, Safari, or Edge.");
         setIsLoading(false);
       }
@@ -113,7 +135,9 @@ export default function VideoPlayer({ url, type }) {
     const onPause = () => setIsPlaying(false);
     const onTimeUpdate = () => setCurrentTime(video.currentTime);
     const onLoadedMetadata = () => {
-      setDuration(video.duration);
+      const dur = video.duration;
+      setDuration(dur);
+      setIsLive(!isFinite(dur) || dur === Infinity);
       setIsLoading(false);
     };
     const onVolumeChange = () => setVolume(video.volume);
@@ -145,8 +169,7 @@ export default function VideoPlayer({ url, type }) {
     // Keyboard controls
     const handleKeyDown = (e) => {
       if (!video) return;
-      // Ignore if user is typing in an input
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
 
       switch (e.key) {
         case " ":
@@ -162,7 +185,7 @@ export default function VideoPlayer({ url, type }) {
         case "ArrowRight":
         case "l":
           e.preventDefault();
-          video.currentTime = Math.min(video.duration, video.currentTime + 10);
+          video.currentTime = Math.min(video.duration || video.currentTime + 10, video.currentTime + 10);
           break;
         case "ArrowUp":
           e.preventDefault();
@@ -191,7 +214,9 @@ export default function VideoPlayer({ url, type }) {
         case "7":
         case "8":
         case "9":
-          video.currentTime = (video.duration * parseInt(e.key)) / 10;
+          if (video.duration && isFinite(video.duration)) {
+            video.currentTime = (video.duration * parseInt(e.key)) / 10;
+          }
           break;
       }
     };
@@ -205,7 +230,6 @@ export default function VideoPlayer({ url, type }) {
     document.addEventListener("fullscreenchange", onFullscreenChange);
 
     return () => {
-      // Remove event listeners first
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("timeupdate", onTimeUpdate);
@@ -219,66 +243,66 @@ export default function VideoPlayer({ url, type }) {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("fullscreenchange", onFullscreenChange);
 
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
+      cleanup();
     };
-  }, [url, type, extractDriveId, buildDriveUrl]);
+  }, [url, type, cleanup, extractDriveId, buildDriveUrl]);
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
-      video.play();
+      video.play().catch(console.error);
     } else {
       video.pause();
     }
-  };
+  }, []);
 
-  const handleSeek = (e) => {
+  const handleSeek = useCallback((e) => {
     const video = videoRef.current;
     const time = parseFloat(e.target.value);
     if (video && !isNaN(time)) {
       video.currentTime = time;
     }
-  };
+  }, []);
 
-  const handleVolume = (e) => {
+  const handleVolume = useCallback((e) => {
     const video = videoRef.current;
     const vol = parseFloat(e.target.value);
     if (video) {
       video.volume = vol;
       setVolume(vol);
     }
-  };
+  }, []);
 
-  const handlePlaybackRate = (e) => {
+  const handlePlaybackRate = useCallback((e) => {
     const video = videoRef.current;
     const rate = parseFloat(e.target.value);
     if (video) {
       video.playbackRate = rate;
       setPlaybackRate(rate);
     }
-  };
+  }, []);
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
 
     if (!document.fullscreenElement) {
-      video.requestFullscreen().then(() => setIsFullscreen(true)).catch(console.error);
+      video.requestFullscreen().catch(console.error);
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(console.error);
+      document.exitFullscreen().catch(console.error);
     }
-  };
+  }, []);
 
-  const formatTime = (seconds) => {
-    if (isNaN(seconds) || !isFinite(seconds)) return "0:00";
+  const formatTime = useCallback((seconds) => {
+    if (isNaN(seconds) || !isFinite(seconds)) return "LIVE";
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
+  }, []);
+
+  // Progress bar max value
+  const progressMax = useMemo(() => (duration > 0 && isFinite(duration) ? duration : 100), [duration]);
 
   // Show error state
   if (error) {
@@ -421,6 +445,26 @@ export default function VideoPlayer({ url, type }) {
             </div>
           </div>
         )}
+
+        {/* Live Badge */}
+        {isLive && !isLoading && (
+          <div
+            style={{
+              position: "absolute",
+              top: "1rem",
+              left: "1rem",
+              background: "#ff4757",
+              color: "white",
+              padding: "0.3rem 0.8rem",
+              borderRadius: "4px",
+              fontSize: "0.8rem",
+              fontWeight: "bold",
+              animation: "pulse 1.5s infinite",
+            }}
+          >
+            🔴 LIVE
+          </div>
+        )}
       </div>
 
       {/* Controls */}
@@ -430,26 +474,26 @@ export default function VideoPlayer({ url, type }) {
           <input
             type="range"
             min="0"
-            max={duration > 0 ? duration : 100}
+            max={progressMax}
             value={currentTime}
             onChange={handleSeek}
-            disabled={duration <= 0 || isLoading}
+            disabled={duration <= 0 || isLoading || isLive}
             style={{
               width: "100%",
               height: "6px",
               borderRadius: "3px",
               appearance: "none",
-              background: duration > 0
-                ? `linear-gradient(to right, #667eea ${(currentTime / duration) * 100}%, #333 ${(currentTime / duration) * 100}%)`
+              background: duration > 0 && isFinite(duration)
+                ? `linear-gradient(to right, #667eea ${(currentTime / progressMax) * 100}%, #333 ${(currentTime / progressMax) * 100}%)`
                 : "#333",
               outline: "none",
-              opacity: duration > 0 ? 1 : 0.5,
-              cursor: duration > 0 ? "pointer" : "not-allowed",
+              opacity: (duration > 0 && isFinite(duration)) ? 1 : 0.5,
+              cursor: (duration > 0 && isFinite(duration)) ? "pointer" : "not-allowed",
             }}
           />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.5rem", color: "#aaa", fontSize: "14px" }}>
             <span>{formatTime(currentTime)}</span>
-            <span>{duration > 0 ? formatTime(duration) : "--:--"}</span>
+            <span>{isLive ? "LIVE" : duration > 0 && isFinite(duration) ? formatTime(duration) : "--:--"}</span>
           </div>
         </div>
 
@@ -543,13 +587,17 @@ export default function VideoPlayer({ url, type }) {
 
         {/* Video Info */}
         <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #0f3460", color: "#888", fontSize: "14px" }}>
-          <strong>Type:</strong> {type.toUpperCase()} | <strong>Status:</strong> {isPlaying ? "Playing" : isLoading ? "Loading..." : "Paused"}
+          <strong>Type:</strong> {type.toUpperCase()} | <strong>Status:</strong> {isPlaying ? "Playing" : isLoading ? "Loading..." : isLive ? "Live" : "Paused"}
         </div>
       </div>
 
       <style jsx global>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
         }
         input[type="range"]::-webkit-slider-thumb {
           appearance: none;
