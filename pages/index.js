@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import Head from "next/head";
 import VideoPlayer from "../components/VideoPlayer";
 
@@ -8,14 +8,14 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
 
-  const handlePlay = (url, type) => {
+  const handlePlay = useCallback((url, type) => {
     setVideoUrl(url);
     setVideoType(type);
     setIsPlaying(true);
-  };
+  }, []);
 
-  // Improved auto-detection logic
-  const detectVideoType = (url) => {
+  // Memoized video type detection - stable reference
+  const detectVideoType = useCallback((url) => {
     const lowerUrl = url.toLowerCase();
 
     // Google Drive (check first as it may contain other patterns)
@@ -54,9 +54,9 @@ export default function Home() {
 
     // Default to mp4 for unknown
     return "mp4";
-  };
+  }, []);
 
-  const handleCustomPlay = () => {
+  const handleCustomPlay = useCallback(() => {
     if (!customUrl.trim()) return;
 
     const type = detectVideoType(customUrl);
@@ -64,7 +64,47 @@ export default function Home() {
     setVideoUrl(customUrl.trim());
     setVideoType(type);
     setIsPlaying(true);
-  };
+  }, [customUrl, detectVideoType]);
+
+  // Demo videos - memoized to prevent re-renders
+  const demoVideos = useMemo(() => [
+    {
+      id: "hls-test",
+      label: "HLS Test Stream",
+      subtitle: ".m3u8 format • Adaptive bitrate streaming",
+      icon: "📺",
+      url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+      type: "hls",
+      gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    },
+    {
+      id: "big-buck-bunny",
+      label: "Big Buck Bunny",
+      subtitle: "MP4 format • Classic open source film",
+      icon: "🎥",
+      url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+      type: "mp4",
+      gradient: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+    },
+    {
+      id: "w3schools",
+      label: "W3Schools Sample",
+      subtitle: "MP4 format • Educational content",
+      icon: "🎞️",
+      url: "https://www.w3schools.com/html/mov_bbb.mp4",
+      type: "mp4",
+      gradient: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+    },
+    {
+      id: "tears-of-steel",
+      label: "Tears of Steel",
+      subtitle: "HLS format • Open movie project",
+      icon: "🌊",
+      url: "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
+      type: "hls",
+      gradient: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
+    },
+  ], []);
 
   return (
     <>
@@ -72,7 +112,7 @@ export default function Home() {
         <title>🎬 Ultimate Video Player - Drive, CDN & m3u8 Support</title>
         <meta name="description" content="Multi-format Video Player supporting Google Drive, CDN, and HLS streams" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        {/* Removed favicon reference since file doesn't exist in repo */}
+        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
       </Head>
 
       <div style={{
@@ -172,93 +212,29 @@ export default function Home() {
               <h3 style={{ marginBottom: "1.5rem" }}>📺 Try Demo Videos</h3>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
-                {/* HLS Stream */}
-                <button
-                  onClick={() => handlePlay("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "hls")}
-                  style={{
-                    padding: "1.5rem",
-                    borderRadius: "12px",
-                    border: "none",
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    color: "#fff",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                    transition: "transform 0.2s, box-shadow 0.2s",
-                    textAlign: "left",
-                  }}
-                >
-                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📺</div>
-                  <div>HLS Test Stream</div>
-                  <div style={{ fontSize: "0.85rem", opacity: 0.8, marginTop: "0.5rem" }}>
-                    .m3u8 format • Adaptive bitrate streaming
-                  </div>
-                </button>
-
-                {/* MP4 Sample */}
-                <button
-                  onClick={() => handlePlay("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", "mp4")}
-                  style={{
-                    padding: "1.5rem",
-                    borderRadius: "12px",
-                    border: "none",
-                    background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-                    color: "#fff",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                    transition: "transform 0.2s, box-shadow 0.2s",
-                    textAlign: "left",
-                  }}
-                >
-                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🎥</div>
-                  <div>Big Buck Bunny</div>
-                  <div style={{ fontSize: "0.85rem", opacity: 0.8, marginTop: "0.5rem" }}>
-                    MP4 format • Classic open source film
-                  </div>
-                </button>
-
-                {/* W3Schools Video */}
-                <button
-                  onClick={() => handlePlay("https://www.w3schools.com/html/mov_bbb.mp4", "mp4")}
-                  style={{
-                    padding: "1.5rem",
-                    borderRadius: "12px",
-                    border: "none",
-                    background: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-                    color: "#fff",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                    transition: "transform 0.2s, box-shadow 0.2s",
-                    textAlign: "left",
-                  }}
-                >
-                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🎞️</div>
-                  <div>W3Schools Sample</div>
-                  <div style={{ fontSize: "0.85rem", opacity: 0.8, marginTop: "0.5rem" }}>
-                    MP4 format • Educational content
-                  </div>
-                </button>
-
-                {/* Another HLS Stream */}
-                <button
-                  onClick={() => handlePlay("https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8", "hls")}
-                  style={{
-                    padding: "1.5rem",
-                    borderRadius: "12px",
-                    border: "none",
-                    background: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
-                    color: "#fff",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                    transition: "transform 0.2s, box-shadow 0.2s",
-                    textAlign: "left",
-                  }}
-                >
-                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🌊</div>
-                  <div>Tears of Steel</div>
-                  <div style={{ fontSize: "0.85rem", opacity: 0.8, marginTop: "0.5rem" }}>
-                    HLS format • Open movie project
-                  </div>
-                </button>
+                {demoVideos.map((video) => (
+                  <button
+                    key={video.id}
+                    onClick={() => handlePlay(video.url, video.type)}
+                    style={{
+                      padding: "1.5rem",
+                      borderRadius: "12px",
+                      border: "none",
+                      background: video.gradient,
+                      color: "#fff",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      textAlign: "left",
+                    }}
+                  >
+                    <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>{video.icon}</div>
+                    <div>{video.label}</div>
+                    <div style={{ fontSize: "0.85rem", opacity: 0.8, marginTop: "0.5rem" }}>
+                      {video.subtitle}
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
